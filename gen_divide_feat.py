@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[1]:
+# In[ ]:
 
 
 import time
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import lightgbm as lgb
 from dateutil.parser import parse
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import GridSearchCV
 try:
@@ -19,16 +19,13 @@ except ImportError:
     raise ImportError('You need to install matplotlib for plot_example.py.')
 
 
-# In[9]:
+# In[ ]:
 
 
 data_path = 'D:/tianchi/diabate/'
 
-# train = pd.read_csv(data_path+'d_train_20180102.csv',encoding='gb2312')
-# test = pd.read_csv(data_path+'d_test_A_20180102.csv',encoding='gb2312')
 
-
-# In[3]:
+# In[ ]:
 
 
 def make_train_set():
@@ -37,7 +34,8 @@ def make_train_set():
     
     ulimit = np.percentile(train[u'血糖'].values, 99.5)
     llimit = np.percentile(train[u'血糖'].values, 0.3)
-    print (ulimit, llimit)
+
+    
     train = train[train[u'血糖'] < ulimit]
     train = train[train[u'血糖'] > llimit]
     
@@ -52,8 +50,6 @@ def make_train_set():
     
     tarin_y = train['血糖']
     train_x = train.drop(['血糖'],axis=1)
-    
-    
     
     return train_x,tarin_y
 
@@ -72,16 +68,14 @@ def make_test_set():
 
 
 
-X_train, Y_train = make_train_set()
-X_test = make_test_set()
-columns = [f for f in X_train.columns]
+train, Y_train = make_train_set()
+test = make_test_set()
+
+origin_columns = [f for f in train.columns]
+print("初始特征：",origin_columns)
 
 
-x_train, x_test, y_train, y_test = train_test_split(X_train.values, Y_train.values, test_size=0.2, random_state=100)    
-lgb_train = lgb.Dataset(x_train, y_train)
-
-
-# In[4]:
+# In[ ]:
 
 
 param = {
@@ -101,62 +95,131 @@ param = {
     #'max_bin': 300,
 
 }
-print ('cv to find best num_boost_round')
-bst = lgb.cv(
-    param, lgb_train, num_boost_round=10000, nfold=10, stratified=False, shuffle=True,
-    early_stopping_rounds=100, verbose_eval=100, show_stdv=True, seed=100)
-
-print (u'迭代:', len(bst['l2-mean']), u' CV:', bst['l2-mean'][-1])
 
 
-# In[7]:
+# In[ ]:
 
 
-# K折预测取平均
-gbm = lgb.train(params=param,
-                train_set=lgb_train,
-                num_boost_round=len(bst['l2-mean']),
-                )
 
-print('Plot feature importances...')
-ax = lgb.plot_importance(gbm, max_num_features=20)
-plt.show()
+lgb_train = lgb.Dataset(train.values,  Y_train.values)
 
-feat_imp = pd.Series(gbm.feature_importance(), index=columns).sort_values(ascending=False)
-print(feat_imp.index[:20])
+kf = KFold(n_splits=10, shuffle=True, random_state=520)
+t0 = time.time()
+result_feat_imp = pd.DataFrame()
 
 
-###这是测试得到的top50 特征，测试代码已省
-top_columns = ['年龄/红细胞体积分布宽度', '尿素/高密度脂蛋白胆固醇', '红细胞平均体积/红细胞平均血红蛋白浓度', '红细胞体积分布宽度/血红蛋白',
-       '年龄/高密度脂蛋白胆固醇', '*天门冬氨酸氨基转换酶/总胆固醇', '红细胞体积分布宽度/血小板平均体积',
-       '总胆固醇/*天门冬氨酸氨基转换酶', '甘油三酯/尿酸', '红细胞平均体积/血小板平均体积',
-       '*丙氨酸氨基转换酶/*天门冬氨酸氨基转换酶', '白细胞计数/红细胞体积分布宽度', '年龄/血小板计数', '尿酸/血红蛋白',
-       '尿酸/*碱性磷酸酶', '甘油三酯/*天门冬氨酸氨基转换酶', '年龄/*天门冬氨酸氨基转换酶', '红细胞平均体积/乙肝核心抗体',
-       '红细胞体积分布宽度/年龄', '*碱性磷酸酶/红细胞平均体积', '*天门冬氨酸氨基转换酶/*丙氨酸氨基转换酶',
-       '红细胞平均血红蛋白浓度/红细胞平均体积', '红细胞体积分布宽度/总胆固醇', '红细胞平均体积/年龄', '白细胞计数/血小板计数',
-       '红细胞体积分布宽度/白蛋白', '红细胞平均体积/血红蛋白', '尿素/红细胞平均体积', '*碱性磷酸酶/高密度脂蛋白胆固醇',
-       '红细胞体积分布宽度/红细胞平均血红蛋白浓度', '甘油三酯/血小板计数', '尿酸/血小板平均体积', '尿素/红细胞体积分布宽度',
-       '*天门冬氨酸氨基转换酶/*碱性磷酸酶', '高密度脂蛋白胆固醇/年龄', '高密度脂蛋白胆固醇/中性粒细胞%',
-       '血红蛋白/高密度脂蛋白胆固醇', '白蛋白/血红蛋白', '*碱性磷酸酶/总胆固醇', '年龄/尿酸', '尿酸/白细胞计数',
-       '总胆固醇/年龄', '年龄/红细胞平均体积', '*天门冬氨酸氨基转换酶/白细胞计数', '红细胞体积分布宽度/白细胞计数',
-       '尿素/尿酸', '血红蛋白/红细胞平均体积', '血红蛋白/血小板计数', '尿酸/总胆固醇', '红细胞体积分布宽度/尿素']
+for i, (train_index, test_index) in enumerate(kf.split(train)):
+    print ( 'strat training', i)
+    train_feat1 = train.iloc[train_index]
+    label_feat1 = Y_train.iloc[train_index]
+    train_feat2 = train.iloc[test_index]
+    label_feat2 = Y_train.iloc[test_index]
 
-for i in feat_imp.index[:20]:
-    for j in feat_imp.index[:20] :
+    lgb_train1 = lgb.Dataset(
+        train_feat1.values, label_feat1.values)
+
+    # K折预测取平均
+    print  ( 'cv to find best num_boost_round')
+    bst = lgb.cv(
+        param, lgb_train1, num_boost_round=10000, nfold=10, stratified=False, shuffle=True,
+        early_stopping_rounds=100, verbose_eval=100, show_stdv=True, seed=100)
+    print ( u'迭代:', len(bst['l2-mean']), u' CV:', bst['l2-mean'][-1])
+    gbm = lgb.train(params=param,
+                    train_set=lgb_train1,
+                    num_boost_round=len(bst['l2-mean']),
+                    # num_boost_round=20000,
+                    # early_stopping_rounds=100
+                    )
+    feat_imp = pd.Series(gbm.feature_importance(
+    ), name=i, index=train.columns).sort_values(ascending=False)
+    result_feat_imp = pd.concat([result_feat_imp, feat_imp], axis=1)
+
+
+# In[ ]:
+
+
+mean_feat_imp = pd.Series(result_feat_imp.mean(
+    axis=1), name="mean", index=train.columns).sort_values(ascending=False)
+result_feat_imp = pd.concat(
+    [result_feat_imp, mean_feat_imp], axis=1).sort_values(by='mean', ascending=False)
+
+##原始特征的top20
+origin_top20 = list(result_feat_imp.index[:20])
+print ("初始特征top20:",origin_top20)
+
+
+# In[ ]:
+
+
+##原始特征top20相除特征共计380个
+divide_columns = []
+for i in origin_top20:
+    for j in origin_top20:
         if j!=i:
             divide = i+"/"+j
-            if divide in top_columns:
-                X_train[divide] = X_train[i]/X_train[j]
-                X_test[divide] = X_test[i]/X_test[j]
-                
-##是否保留原始特征
-# X_train  = X_train.drop(columns,axis=1)
-# X_test  = X_test.drop(columns,axis=1)
+            divide_columns.append(divide)
+            train[divide] = train[i]/train[j]
+            test[divide] = test[i]/test[j]
+  
 
 
-train_divide = pd.concat([X_train, Y_train],axis=1)
+# In[ ]:
+
+
+###得到仅相除特征的top50
+divide_train = train[divide_columns]
+lgb_train = lgb.Dataset(divide_train.values,  Y_train.values)
+
+kf = KFold(n_splits=10, shuffle=True, random_state=520)
+# pdb.set_trace()
+t0 = time.time()
+result_feat_imp = pd.DataFrame()
+
+print ( "获取仅相除特征top50")
+for i, (train_index, test_index) in enumerate(kf.split(divide_train)):
+    print ( 'strat training', i)
+    train_feat1 = divide_train.iloc[train_index]
+    label_feat1 = Y_train.iloc[train_index]
+    train_feat2 = divide_train.iloc[test_index]
+    label_feat2 = Y_train.iloc[test_index]
+
+    lgb_train1 = lgb.Dataset(
+        train_feat1.values, label_feat1.values)
+
+    # K折预测取平均
+    print  ( 'cv to find best num_boost_round')
+    bst = lgb.cv(
+        param, lgb_train1, num_boost_round=10000, nfold=10, stratified=False, shuffle=True,
+        early_stopping_rounds=100, verbose_eval=100, show_stdv=True, seed=100)
+    print ( u'迭代:', len(bst['l2-mean']), u' CV:', bst['l2-mean'][-1])
+    gbm = lgb.train(params=param,
+                    train_set=lgb_train1,
+                    num_boost_round=len(bst['l2-mean']),
+                    # num_boost_round=20000,
+                    # early_stopping_rounds=100
+                    )
+    feat_imp = pd.Series(gbm.feature_importance(), name=i, index=divide_train.columns).sort_values(ascending=False)
+    result_feat_imp = pd.concat([result_feat_imp, feat_imp], axis=1)
+
+
+# In[ ]:
+
+
+mean_feat_imp = pd.Series(result_feat_imp.mean(
+    axis=1), name="mean", index=divide_train.columns).sort_values(ascending=False)
+result_feat_imp = pd.concat(
+    [result_feat_imp, mean_feat_imp], axis=1).sort_values(by='mean', ascending=False)
+
+
+divide_top50 = list(result_feat_imp.index[:50])
+print("相除特征top50",divide_top50 )
+
+
+# In[ ]:
+
+
+train_divide = pd.concat([train[origin_columns],train[divide_top50],Y_train],axis=1)
 train_divide.to_csv('./train_divide.csv',index=False)
-X_test.to_csv('./test_divide.csv',index=False)
-
-
+test_divide = pd.concat([test[origin_columns],test[divide_top50]],axis=1)
+test.to_csv('./test_divide.csv',index=False)
 
